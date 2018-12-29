@@ -1,175 +1,144 @@
 #pragma once
 #include <cassert>
 
-class ResizePolicy	//или без класса, просто глобальные переменные
-{
-public:
-	static short int beginVolume;	//начальный объем выделяемой памяти
-	static float constEnlarg;	  //множитель при расширении
-};
+auto beginVolume = 128;
+auto constEnlarg = 1.2f;
 
-//Объявить глобально
-short int ResizePolicy::beginVolume = 128;
-float ResizePolicy::constEnlarg = 1.2f;
-
-/*export*/ template <typename T>	//нет больше export, всю реализацию засовываем в один файл
+template <typename Type>
 class Vector
 {
 private:	
 	int capacity;
 	int length;
-	T* data;
+	Type* data;
 public:
-	explicit Vector();
-	explicit Vector(int size, const T& value);
-	Vector(const Vector<T>& A);
+	explicit Vector() : capacity(0), length(0) {};
+	explicit Vector(int size, const Type& value);
+	Vector(const Vector<Type>& A);
 	~Vector();
-	void PushBack(const T& item);
-	void PopBack()
+
+	void PushBack(const Type& item);
+	void PopBack();
+	void Erase(int k);
+	void Reserve(int n);
+	void Resize(int n, Type item = Type());
+	void Clear();
+	int Size() { return length; }
+	int Capacity() { return capacity; }
+	bool Empty() { return !length; }
+	Type& operator[](int index)
 	{
-		//якобы удаляем
-		assert(this->length > 0);
-		--this->length;
-	}
-	void Erase(int k);	//удаление k-го элемента
-	void Reserve(int n);	//выделение памяти под n элементов
-	void Resize(int n, T item = T());	//изменение размера вектора
-	void Clear()	//очистка вектора
-	{
-		this->length = 0;	//значения можно и не занулять
-	}
-	int Size() { return this->length; }
-	int Capacity() { return this->capacity; }
-	
-	T& operator[](int index)
-	{
-		assert(index >= 0 && index < this->length);
+		assert(index >= 0 && index < length);
 		return data[index];
 	}
 };
 
-template<typename T> Vector<T>::Vector()
+template<typename Type> Vector<Type>::Vector(int size, const Type& value = Type())
 {
-	//Выделяем "про запас" несколько элементов общим объемом ResizePolicy::beginVolume
-	this->capacity = ResizePolicy::beginVolume / sizeof(T);
-	this->length = 0;
-	this->data = new T[this->capacity];
-}
-
-template<typename T> Vector<T>::Vector(int size, const T& value = T())
-{
-	//Выделяем память для n элементов (хозяин-барин, запас не делаем)
-	this->capacity = size;
-	this->length = size;
-	this->data = new T[this->capacity];
+	capacity = size;
+	length = size;
+	data = (Type*)std::malloc(capacity * sizeof(Type));
 	for (int i = 0; i < size; i++)
-		this->data[i] = value;
+		new (&data[i]) Type(value);
 }
 
-template<typename T> Vector<T>::Vector(const Vector<T>& A)
+template<typename Type> Vector<Type>::Vector(const Vector<Type>& A)
 {
-	this->capacity = A.capacity;
-	this->length = A.length;
-	this->data = new T[this->capacity];
-	for (int i = 0; i < this->length; i++)
-		this->data[i] = A.data[i];
+	capacity = A.capacity;
+	length = A.length;
+	data = (Type*)std::malloc(capacity * sizeof(Type));
+	std::memcpy(data, A.data, length * sizeof(Type));
 }
 
-template<typename T> Vector<T>::~Vector()
+template<typename Type> Vector<Type>::~Vector()
 {
-	assert(this->capacity > 0);
-	delete[] this->data;
-}
-
-template<typename T> void Vector<T>::PushBack(const T& item)
-{
-	if (this->length >= this->capacity)
+	if (capacity)
 	{
-		//расширяем
-		this->capacity *= ResizePolicy::constEnlarg;
-		T* newData = new T[this->capacity];
-		int moduloLength = this->length % 4;
-		for (int i = 0; i < this->length - moduloLength; i+=4)	//а развёртки то хороши (даже такие кривые)
+		for (int i = 0; i < length; i++)
+			((Type*)&data[i])->~Type();
+		std::free(data);
+	}
+}
+
+template<typename Type> void Vector<Type>::PushBack(const Type& item)
+{
+	if (length >= capacity)
+	{
+		if (!capacity)
 		{
-			newData[i] = this->data[i];
-			newData[i + 1] = this->data[i + 1];
-			newData[i + 2] = this->data[i + 2];
-			newData[i + 3] = this->data[i + 3];
+			capacity = beginVolume / sizeof(Type);
+			data = (Type*)std::malloc(capacity*sizeof(Type));
 		}
-		while (moduloLength)
+		else
 		{
-			newData[this->length - moduloLength] = this->data[this->length - moduloLength];
-			--moduloLength;
+			capacity *= constEnlarg;
+			Type* newData = (Type*)std::malloc(capacity * sizeof(Type));
+			std::memcpy(newData, data, length * sizeof(Type));
+			std::free(data);
+			data = newData;
 		}
-		T* deleteData = this->data;
-		this->data = newData;
-		delete[] deleteData;
 	}
-	this->data[this->length++] = item;
+	new (&data[length++]) Type(item);
 }
 
-template<typename T> void Vector<T>::Erase(int k)
+template<typename Type> void Vector<Type>::PopBack()
 {
-//ужасно медленно даже с развёрткой
-	int modulo = (this->length-k) % 4;
-	for (int i = k; i < this->length - modulo; i+=4)
-	{
-		this->data[i] = this->data[i + 1];
-		this->data[i + 1] = this->data[i + 2];
-		this->data[i + 2] = this->data[i + 3];
-		this->data[i + 3] = this->data[i + 4];
-	}
-	while (modulo>1)
-	{
-		this->data[this->length - modulo] = this->data[this->length - modulo + 1];
-		--modulo;
-	}
-	--this->length;
+	assert(this->length > 0);
+	((Type*)&data[length-1])->~Type();
+	--length;
 }
 
-template<typename T> void Vector<T>::Reserve(int n)
+template<typename Type> void Vector<Type>::Erase(int k)
 {
-	this->capacity = n;
-	if (n < this->length)
-		this->length = n;
-	T* newData = new T[this->capacity];
-	for (int i = 0; i < this->length; i++)
-	{
-		newData[i] = this->data[i];
-	}
-	T* deleteData = this->data;
-	this->data = newData;
-	delete[] deleteData;
+	((Type*)&data[k])->~Type();
+	--length;
+	std::memmove((Type*)&data[k], (Type*)&data[k+1], (length-k) * sizeof(Type));	
 }
 
-template<typename T> void Vector<T>::Resize(int n, T item = T())
+template<typename Type> void Vector<Type>::Reserve(int n)
 {
-	if (n > this->capacity)
+	if (capacity != n)
 	{
-		//Расширяем до n (без запаса)
-		this->capacity = n;
-		//копипаст из PushBack()
-		T* newData = new T[this->capacity];
-		int moduloLength = this->length % 4;
-		for (int i = 0; i < this->length - moduloLength; i += 4)
+		capacity = n;
+		if (n < length)
 		{
-			newData[i] = this->data[i];
-			newData[i + 1] = this->data[i + 1];
-			newData[i + 2] = this->data[i + 2];
-			newData[i + 3] = this->data[i + 3];
+			for (int i = n; i < length; i++)
+				((Type*)&data[i])->~Type();
+			length = n;
 		}
-		while (moduloLength)
-		{
-			newData[this->length - moduloLength] = this->data[this->length - moduloLength];
-			--moduloLength;
-		}
-		T* deleteData = this->data;
-		this->data = newData;
-		delete[] deleteData;
+		Type* newData = (Type*)std::malloc(capacity * sizeof(Type));
+		std::memcpy(newData, data, length * sizeof(Type));
+		std::free(data);
+		data = newData;
 	}
-	for (int i = this->length; i < n; i++)
+}
+
+template<typename Type> void Vector<Type>::Resize(int n, Type item = Type())
+{
+	if (n <= length)	
 	{
-		this->data[i] = item;
+		for (int i = n; i < length; i++)
+			((Type*)&data[i])->~Type();
 	}
-	this->length = n;
+	else
+	{
+		if (n > capacity)
+		{
+			capacity = n;
+			Type* newData = (Type*)std::malloc(capacity * sizeof(Type));
+			std::memcpy(newData, data, length * sizeof(Type));
+			std::free(data);
+			data = newData;
+		}
+		for (int i = length; i < n; i++)
+			new (&data[i]) Type(item);
+	}
+	length = n;
+}
+
+template<typename Type> void Vector<Type>::Clear()
+{
+	for (int i=0; i<length; i++)
+		((Type*)&data[i])->~Type();
+	length = 0;
 }
