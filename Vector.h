@@ -1,144 +1,218 @@
 #pragma once
 #include <cassert>
 
-auto beginVolume = 128;
-auto constEnlarg = 1.2f;
-
 template <typename Type>
 class Vector
 {
-private:	
-	int capacity;
-	int length;
-	Type* data;
+private:
+	int buffLen;
+	int dataLen;
+	Type* pData;
 public:
-	explicit Vector() : capacity(0), length(0) {};
-	explicit Vector(int size, const Type& value);
-	Vector(const Vector<Type>& A);
+	explicit Vector() : buffLen(0), dataLen(0), pData(nullptr) {};
+	explicit Vector(int n, const Type& item = Type());
+	Vector(const Vector<Type>& other);
+	Vector(Vector<Type>&& tmp);
 	~Vector();
 
 	void PushBack(const Type& item);
 	void PopBack();
-	void Erase(int k);
+	void Erase(unsigned index);
+	void Erase(unsigned first, unsigned last);
 	void Reserve(int n);
 	void Resize(int n, Type item = Type());
 	void Clear();
-	int Size() { return length; }
-	int Capacity() { return capacity; }
-	bool Empty() { return !length; }
+	int Size() { return dataLen; }
+	int Capacity() { return buffLen; }
+	bool Empty() { return !dataLen; }
+
+	Vector<Type>& operator=(const Vector<Type>& other);
+	Vector<Type>& operator=(Vector<Type>&& other);
 	Type& operator[](int index)
 	{
-		assert(index >= 0 && index < length);
-		return data[index];
+		assert(index >= 0 && index < dataLen);
+		return pData[index];
 	}
+
+private:
+	void Destroy();
+	void EnlargBuff();
 };
 
-template<typename Type> Vector<Type>::Vector(int size, const Type& value = Type())
+template<typename Type>
+Vector<Type>::Vector(int n, const Type& item = Type())
+	:buffLen(n), dataLen(n), pData(nullptr)
 {
-	capacity = size;
-	length = size;
-	data = (Type*)std::malloc(capacity * sizeof(Type));
-	for (int i = 0; i < size; i++)
-		new (&data[i]) Type(value);
-}
-
-template<typename Type> Vector<Type>::Vector(const Vector<Type>& A)
-{
-	capacity = A.capacity;
-	length = A.length;
-	data = (Type*)std::malloc(capacity * sizeof(Type));
-	std::memcpy(data, A.data, length * sizeof(Type));
-}
-
-template<typename Type> Vector<Type>::~Vector()
-{
-	if (capacity)
+	if (n)
 	{
-		for (int i = 0; i < length; i++)
-			((Type*)&data[i])->~Type();
-		std::free(data);
+		pData = (Type*)std::malloc(buffLen * sizeof(Type));
+		for (int i = 0; i < n; i++)
+			new (&pData[i]) Type(item);
 	}
 }
 
-template<typename Type> void Vector<Type>::PushBack(const Type& item)
+template<typename Type>
+Vector<Type>::Vector(const Vector<Type>& other)
+	:buffLen(other.buffLen), dataLen(other.dataLen), pData(nullptr)
 {
-	if (length >= capacity)
+	if (other.pData)
 	{
-		if (!capacity)
+		pData = (Type*)std::malloc(buffLen * sizeof(Type));
+		for (int i = 0; i < dataLen; i++)
+			new (&pData[i]) Type(other.pData[i]);
+	}
+}
+
+template<typename Type>
+Vector<Type>::Vector(Vector<Type>&& tmp)
+	:buffLen(tmp.buffLen), dataLen(tmp.dataLen), pData(tmp.pData)
+{
+	//tmp.buffLen = 0;
+	//tmp.dataLen = 0;
+	tmp.pData = nullptr;
+}
+
+template<typename Type>
+Vector<Type>::~Vector()
+{
+	Destroy();
+}
+
+template<typename Type>
+void Vector<Type>::PushBack(const Type& item)
+{
+	if (dataLen >= buffLen)
+	{
+		if (!buffLen)
 		{
-			capacity = beginVolume / sizeof(Type);
-			data = (Type*)std::malloc(capacity*sizeof(Type));
+			buffLen = 128 / sizeof(Type);
+			pData = (Type*)std::malloc(buffLen*sizeof(Type));
 		}
 		else
 		{
-			capacity *= constEnlarg;
-			Type* newData = (Type*)std::malloc(capacity * sizeof(Type));
-			std::memcpy(newData, data, length * sizeof(Type));
-			std::free(data);
-			data = newData;
+			buffLen *= 1.2f;
+			EnlargBuff();
 		}
 	}
-	new (&data[length++]) Type(item);
+	new (&pData[dataLen++]) Type(item);
 }
 
-template<typename Type> void Vector<Type>::PopBack()
+template<typename Type>
+void Vector<Type>::PopBack()
 {
-	assert(this->length > 0);
-	((Type*)&data[length-1])->~Type();
-	--length;
+	assert(dataLen > 0);
+	((Type*)&pData[--dataLen])->~Type();
 }
 
-template<typename Type> void Vector<Type>::Erase(int k)
+template<typename Type>
+void Vector<Type>::Erase(unsigned index)
 {
-	((Type*)&data[k])->~Type();
-	--length;
-	std::memmove((Type*)&data[k], (Type*)&data[k+1], (length-k) * sizeof(Type));	
+	assert(index < dataLen);
+	((Type*)&pData[index])->~Type();
+	std::memmove((Type*)&pData[index], (Type*)&pData[index + 1], (--dataLen - index) * sizeof(Type));
 }
 
-template<typename Type> void Vector<Type>::Reserve(int n)
+template<typename Type>
+void Vector<Type>::Erase(unsigned first, unsigned last)
 {
-	if (capacity != n)
+	assert(first <= last && last < dataLen);
+	for (unsigned i=first; i<=last; i++)
+		((Type*)&pData[i])->~Type();
+	dataLen -= ++last - first;
+	std::memmove((Type*)&pData[first], (Type*)&pData[last], (dataLen - first) * sizeof(Type));
+}
+
+template<typename Type>
+void Vector<Type>::Reserve(int n)
+{
+	if (buffLen != n)
 	{
-		capacity = n;
-		if (n < length)
+		buffLen = n;
+		if (n < dataLen)
 		{
-			for (int i = n; i < length; i++)
-				((Type*)&data[i])->~Type();
-			length = n;
+			for (int i = n; i < dataLen; i++)
+				((Type*)&pData[i])->~Type();
+			dataLen = n;
 		}
-		Type* newData = (Type*)std::malloc(capacity * sizeof(Type));
-		std::memcpy(newData, data, length * sizeof(Type));
-		std::free(data);
-		data = newData;
+		EnlargBuff();
 	}
 }
 
-template<typename Type> void Vector<Type>::Resize(int n, Type item = Type())
+template<typename Type>
+void Vector<Type>::Resize(int n, Type item = Type())
 {
-	if (n <= length)	
+	if (n <= dataLen)	
 	{
-		for (int i = n; i < length; i++)
-			((Type*)&data[i])->~Type();
+		for (int i = n; i < dataLen; i++)
+			((Type*)&pData[i])->~Type();
 	}
 	else
 	{
-		if (n > capacity)
+		if (n > buffLen)
 		{
-			capacity = n;
-			Type* newData = (Type*)std::malloc(capacity * sizeof(Type));
-			std::memcpy(newData, data, length * sizeof(Type));
-			std::free(data);
-			data = newData;
+			buffLen = n;
+			EnlargBuff();
 		}
-		for (int i = length; i < n; i++)
-			new (&data[i]) Type(item);
+		for (int i = dataLen; i < n; i++)
+			new (&pData[i]) Type(item);
 	}
-	length = n;
+	dataLen = n;
 }
 
-template<typename Type> void Vector<Type>::Clear()
+template<typename Type>
+void Vector<Type>::Clear()
 {
-	for (int i=0; i<length; i++)
-		((Type*)&data[i])->~Type();
-	length = 0;
+	for (int i=0; i<dataLen; i++)
+		((Type*)&pData[i])->~Type();
+	dataLen = 0;
+}
+
+template<typename Type>
+__forceinline Vector<Type>& Vector<Type>::operator=(const Vector<Type>& other)
+{
+	Destroy();
+	buffLen = other.buffLen;
+	dataLen = other.dataLen;
+	if (other.pData)
+	{
+		pData = (Type*)std::malloc(buffLen * sizeof(Type));
+		for (int i = 0; i < dataLen; i++)
+			new (&pData[i]) Type(other.pData[i]);
+	}
+	else
+		pData = nullptr;
+	return *this;
+}
+
+template<typename Type>
+__forceinline Vector<Type>& Vector<Type>::operator=(Vector<Type>&& tmp)
+{
+	Destroy();
+	buffLen = tmp.buffLen;
+	dataLen = tmp.dataLen;
+	pData = tmp.pData;
+	//tmp.buffLen = 0;
+	//tmp.dataLen = 0;
+	tmp.pData = nullptr;
+	return *this;
+}
+
+template<typename Type>
+__forceinline void Vector<Type>::Destroy()
+{
+	if (pData)
+	{
+		for (int i = 0; i < dataLen; i++)
+			((Type*)&pData[i])->~Type();
+		std::free(pData);
+	}
+}
+
+template<typename Type>
+__forceinline void Vector<Type>::EnlargBuff()
+{
+	Type* newData = (Type*)std::malloc(buffLen * sizeof(Type));
+	std::memcpy(newData, pData, dataLen * sizeof(Type));
+	std::free(pData);
+	pData = newData;
 }
