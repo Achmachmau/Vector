@@ -34,8 +34,6 @@ public:
 		return pData[index];
 	}
 
-	void Print();	//для себя, для проверок
-
 private:
 	void AllocData() { pData = (Type*)std::malloc(buffLen * sizeof(Type)); }
 	void Destroy();
