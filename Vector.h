@@ -27,7 +27,7 @@ public:
 	bool Empty() { return !dataLen; }
 
 	Vector<Type>& operator=(const Vector<Type>& other);
-	Vector<Type>& operator=(Vector<Type>&& other);
+	Vector<Type>& operator=(Vector<Type>&& tmp);
 	Type& operator[](int index)
 	{
 		assert(index >= 0 && index < dataLen);
@@ -35,17 +35,18 @@ public:
 	}
 
 private:
+	void AllocData() { pData = (Type*)std::malloc(buffLen * sizeof(Type)); }
 	void Destroy();
 	void EnlargBuff();
 };
 
 template<typename Type>
-Vector<Type>::Vector(int n, const Type& item = Type())
+Vector<Type>::Vector(int n, const Type& item)
 	:buffLen(n), dataLen(n), pData(nullptr)
 {
 	if (n)
 	{
-		pData = (Type*)std::malloc(buffLen * sizeof(Type));
+		AllocData();
 		for (int i = 0; i < n; i++)
 			new (&pData[i]) Type(item);
 	}
@@ -57,7 +58,7 @@ Vector<Type>::Vector(const Vector<Type>& other)
 {
 	if (other.pData)
 	{
-		pData = (Type*)std::malloc(buffLen * sizeof(Type));
+		AllocData();
 		for (int i = 0; i < dataLen; i++)
 			new (&pData[i]) Type(other.pData[i]);
 	}
@@ -86,7 +87,7 @@ void Vector<Type>::PushBack(const Type& item)
 		if (!buffLen)
 		{
 			buffLen = 128 / sizeof(Type);
-			pData = (Type*)std::malloc(buffLen*sizeof(Type));
+			AllocData();
 		}
 		else
 		{
@@ -168,14 +169,14 @@ void Vector<Type>::Clear()
 }
 
 template<typename Type>
-__forceinline Vector<Type>& Vector<Type>::operator=(const Vector<Type>& other)
+inline Vector<Type>& Vector<Type>::operator=(const Vector<Type>& other)
 {
 	Destroy();
 	buffLen = other.buffLen;
 	dataLen = other.dataLen;
 	if (other.pData)
 	{
-		pData = (Type*)std::malloc(buffLen * sizeof(Type));
+		AllocData();
 		for (int i = 0; i < dataLen; i++)
 			new (&pData[i]) Type(other.pData[i]);
 	}
@@ -185,20 +186,16 @@ __forceinline Vector<Type>& Vector<Type>::operator=(const Vector<Type>& other)
 }
 
 template<typename Type>
-__forceinline Vector<Type>& Vector<Type>::operator=(Vector<Type>&& tmp)
+inline Vector<Type>& Vector<Type>::operator=(Vector<Type>&& tmp)
 {
-	Destroy();
-	buffLen = tmp.buffLen;
-	dataLen = tmp.dataLen;
-	pData = tmp.pData;
-	//tmp.buffLen = 0;
-	//tmp.dataLen = 0;
-	tmp.pData = nullptr;
+	std::swap(buffLen, tmp.buffLen);
+	std::swap(dataLen, tmp.dataLen);
+	std::swap(pData, tmp.pData);
 	return *this;
 }
 
 template<typename Type>
-__forceinline void Vector<Type>::Destroy()
+inline void Vector<Type>::Destroy()
 {
 	if (pData)
 	{
@@ -209,7 +206,7 @@ __forceinline void Vector<Type>::Destroy()
 }
 
 template<typename Type>
-__forceinline void Vector<Type>::EnlargBuff()
+inline void Vector<Type>::EnlargBuff()
 {
 	Type* newData = (Type*)std::malloc(buffLen * sizeof(Type));
 	std::memcpy(newData, pData, dataLen * sizeof(Type));
