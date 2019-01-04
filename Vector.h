@@ -15,7 +15,8 @@ public:
 	Vector(Vector<Type>&& tmp);
 	~Vector();
 
-	void PushBack(const Type& item);
+	template<typename TReference>
+	void PushBack(TReference&& item);
 	void PopBack();
 	void Erase(unsigned index);
 	void Erase(unsigned first, unsigned last);
@@ -34,8 +35,12 @@ public:
 		return pData[index];
 	}
 
+	Type* begin() { return pData; }
+	Type* end() { return &pData[dataLen]; }
+
 private:
-	void AllocData() { pData = (Type*)std::malloc(buffLen * sizeof(Type)); }
+	void Swap(Vector<Type>& other);
+	void AllocData();
 	void Destroy();
 	void EnlargBuff();
 };
@@ -66,11 +71,9 @@ Vector<Type>::Vector(const Vector<Type>& other)
 
 template<typename Type>
 Vector<Type>::Vector(Vector<Type>&& tmp)
-	:buffLen(tmp.buffLen), dataLen(tmp.dataLen), pData(tmp.pData)
+	:Vector()
 {
-	//tmp.buffLen = 0;
-	//tmp.dataLen = 0;
-	tmp.pData = nullptr;
+	Swap(tmp);
 }
 
 template<typename Type>
@@ -80,20 +83,19 @@ Vector<Type>::~Vector()
 }
 
 template<typename Type>
-void Vector<Type>::PushBack(const Type& item)
+template<typename TReference>
+void Vector<Type>::PushBack(TReference && item)
 {
-	if (dataLen >= buffLen)
+	if (!buffLen)
 	{
-		if (!buffLen)
-		{
-			buffLen = 128 / sizeof(Type);
-			AllocData();
-		}
-		else
-		{
-			buffLen *= 1.2f;
-			EnlargBuff();
-		}
+		buffLen = 4;
+		AllocData();
+	}
+	else if (dataLen >= buffLen)
+	{
+		buffLen *= 1.2f;
+		++buffLen;
+		EnlargBuff();
 	}
 	new (&pData[dataLen++]) Type(item);
 }
@@ -126,16 +128,17 @@ void Vector<Type>::Erase(unsigned first, unsigned last)
 template<typename Type>
 void Vector<Type>::Reserve(int n)
 {
-	if (buffLen != n)
+	if (buffLen < n)
 	{
 		buffLen = n;
-		if (n < dataLen)
+		if (pData)
 		{
-			for (int i = n; i < dataLen; i++)
-				((Type*)&pData[i])->~Type();
-			dataLen = n;
+			EnlargBuff();
 		}
-		EnlargBuff();
+		else
+		{
+			AllocData();
+		}
 	}
 }
 
@@ -188,10 +191,23 @@ inline Vector<Type>& Vector<Type>::operator=(const Vector<Type>& other)
 template<typename Type>
 inline Vector<Type>& Vector<Type>::operator=(Vector<Type>&& tmp)
 {
-	std::swap(buffLen, tmp.buffLen);
-	std::swap(dataLen, tmp.dataLen);
-	std::swap(pData, tmp.pData);
+	Swap(tmp);
 	return *this;
+}
+
+template<typename Type>
+inline void Vector<Type>::Swap(Vector<Type>& other)
+{
+	std::swap(buffLen, other.buffLen);
+	std::swap(dataLen, other.dataLen);
+	std::swap(pData, other.pData);
+}
+
+template<typename Type>
+inline void Vector<Type>::AllocData()
+{
+	pData = (Type*)std::malloc(buffLen * sizeof(Type));
+	assert(pData);
 }
 
 template<typename Type>
@@ -209,6 +225,7 @@ template<typename Type>
 inline void Vector<Type>::EnlargBuff()
 {
 	Type* newData = (Type*)std::malloc(buffLen * sizeof(Type));
+	assert(newData);
 	std::memcpy(newData, pData, dataLen * sizeof(Type));
 	std::free(pData);
 	pData = newData;
