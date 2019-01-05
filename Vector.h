@@ -15,8 +15,8 @@ public:
 	Vector(Vector<Type>&& tmp);
 	~Vector();
 
-	template<typename TReference>
-	void PushBack(TReference&& item);
+	template<typename ...TArg>
+	void PushBack(TArg&&... arg);
 	void PopBack();
 	void Erase(unsigned index);
 	void Erase(unsigned first, unsigned last);
@@ -83,8 +83,8 @@ Vector<Type>::~Vector()
 }
 
 template<typename Type>
-template<typename TReference>
-void Vector<Type>::PushBack(TReference && item)
+template<typename ...TArg>
+void Vector<Type>::PushBack(TArg&&... arg)
 {
 	if (!buffLen)
 	{
@@ -97,7 +97,7 @@ void Vector<Type>::PushBack(TReference && item)
 		++buffLen;
 		EnlargBuff();
 	}
-	new (&pData[dataLen++]) Type(std::forward<TReference>(item));
+	new (&pData[dataLen++]) Type(std::forward<TArg>(arg)...);
 }
 
 template<typename Type>
