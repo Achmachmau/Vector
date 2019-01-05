@@ -97,7 +97,7 @@ void Vector<Type>::PushBack(TReference && item)
 		++buffLen;
 		EnlargBuff();
 	}
-	new (&pData[dataLen++]) Type(item);
+	new (&pData[dataLen++]) Type(std::forward<TReference>(item));
 }
 
 template<typename Type>
